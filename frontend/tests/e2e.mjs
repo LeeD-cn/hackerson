@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createWriteStream, existsSync } from 'node:fs';
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,9 @@ import { chromium } from 'playwright';
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
+// Backend stays in its own clean checkout; never import uncommitted P1 drafts.
+const backendRoot = resolve(process.env.RELAY_BACKEND_ROOT || root);
+const checkBE02 = process.env.RELAY_BE02 === '1';
 const python = process.env.RELAY_PYTHON || join(root, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const browserPath = process.env.RELAY_BROWSER_PATH || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined);
 const token = randomBytes(32).toString('hex');
@@ -79,7 +82,7 @@ try {
   while (frontPort === backendPort) frontPort = await freePort();
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const frontendUrl = `http://127.0.0.1:${frontPort}`;
-  const startBackend = () => launch(python, ['-m', 'backend', '--port', String(backendPort), '--db', join(temp, 'relay.db')], root,
+  const startBackend = () => launch(python, ['-m', 'backend', '--port', String(backendPort), '--db', join(temp, 'relay.db')], backendRoot,
     { RELAY_ADMIN_TOKEN: token, PYTHONUTF8: '1' }, 'backend');
   let backend = startBackend();
   await ready(`${backendUrl}/health`, backend);
@@ -98,6 +101,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   page.setDefaultTimeout(10000);
   const pageErrors = [];
+  const requests = [];
+  page.on('request', request => requests.push(new URL(request.url()).pathname));
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto(frontendUrl);
   await page.getByLabel('访问令牌').fill('invalid-token');
@@ -106,6 +111,7 @@ try {
   await page.getByLabel('访问令牌').fill(token);
   await page.getByRole('button', { name: '进入工作空间' }).click();
   await page.getByRole('heading', { name: '从第一项任务开始' }).waitFor();
+  assert(requests.indexOf('/health') >= 0 && requests.indexOf('/health') < requests.indexOf('/api/tools/snapshot'), 'Health check must precede snapshot');
   console.log('PASS: real authentication, rejected invalid token, empty workspace');
 
   async function createTask(name, goal, dependency) {
@@ -181,6 +187,22 @@ try {
   await edit.waitFor({ state: 'hidden' });
   console.log('PASS: real 422 shown, rejected dependency cycle leaves database unchanged');
 
+  // TaskPatch has distinct null semantics: only parent_id is cleared with null.
+  await page.getByTestId('task-row').filter({ hasText: '报名表单 · 联调' }).click();
+  for (const parent of [apiTask.task_id, '']) {
+    await page.getByRole('button', { name: '编辑任务', exact: true }).click();
+    edit = page.getByRole('dialog', { name: '编辑任务' });
+    await edit.getByLabel(/^父任务/).selectOption(parent);
+    await edit.getByLabel('修改理由').fill(parent ? '组织子任务层级' : '移除父任务');
+    await edit.getByRole('button', { name: '保存修改' }).click();
+    await edit.waitFor({ state: 'hidden' });
+    const updated = (await api('snapshot')).tasks.find(t => t.task_id === formTask.task_id);
+    assert.equal(updated.parent_id, parent || null);
+    assert.deepEqual(updated.dependencies, [apiTask.task_id]);
+    assert.equal(updated.goal, '提交报名、校验学号并显示结果。');
+  }
+  console.log('PASS: TaskPatch clears parent_id with null while omitted fields and dependencies stay unchanged');
+
   await page.getByLabel('搜索任务').fill('不存在的任务');
   await page.getByRole('heading', { name: '没有匹配的任务' }).waitFor();
   await page.getByRole('button', { name: '清除筛选' }).click();
@@ -229,6 +251,49 @@ try {
   assert.equal(await page.getByTestId('task-row').count(), 2);
   assert.equal((await api('snapshot')).tasks.find(t => t.task_id === formTask.task_id).goal, '提交报名、校验学号并显示结果。');
   console.log('PASS: backend restart reuses SQLite; browser reload restores the saved tasks');
+
+  if (checkBE02) {
+    assert(existsSync(join(backendRoot, 'backend/be02.py')), 'RELAY_BE02 requires a backend checkout containing backend.be02');
+    const fixture = join(backendRoot, '.local/be02', `frontend-${randomBytes(6).toString('hex')}.json`);
+    async function runFixture(command) {
+      const child = launch(python, ['-m', 'backend.be02', command, '--url', backendUrl, '--credentials', fixture], backendRoot,
+        { RELAY_ADMIN_TOKEN: token, PYTHONUTF8: '1' }, `be02-${command}`);
+      await new Promise((yes, no) => {
+        const timer = setTimeout(() => { child.kill(); no(new Error(`BE-02 ${command} timed out; inspect local logs`)); }, 30000);
+        child.once('error', error => { clearTimeout(timer); no(error); });
+        child.once('exit', code => { clearTimeout(timer); code === 0 ? yes() : no(new Error(`BE-02 ${command} failed; inspect local logs`)); });
+      });
+    }
+    await runFixture('seed');
+    await runFixture('check');
+    const bundle = JSON.parse(await readFile(fixture, 'utf8'));
+    await page.getByRole('button', { name: '刷新数据' }).click();
+    await page.getByTestId('task-row').filter({ hasText: 'BE02-A-' }).click();
+    await page.getByRole('tab', { name: '工作上下文' }).click();
+    const panel = page.getByRole('tabpanel');
+    await panel.getByText(bundle.tasks.a.private_marker, { exact: true }).waitFor();
+    assert(!(await panel.innerText()).includes(bundle.tasks.b.private_marker));
+    assert.equal(await panel.locator('section').filter({ has: page.getByRole('heading', { name: '待办事项', exact: true }) }).locator('p').innerText(), '尚未填写');
+    const beforeRestart = (await api('snapshot')).contexts[bundle.tasks.a.task_id];
+    assert.equal(beforeRestart.version, bundle.tasks.a.expected_context.version);
+    await stop(backend);
+    backend = startBackend();
+    await ready(`${backendUrl}/health`, backend);
+    await runFixture('verify-restored');
+    await page.reload();
+    await page.getByRole('tab', { name: '工作上下文' }).click();
+    await page.getByRole('tabpanel').getByText(bundle.tasks.a.private_marker, { exact: true }).waitFor();
+    // Task credentials are not accepted as control-plane credentials.
+    await page.getByRole('button', { name: '退出登录' }).click();
+    await page.getByLabel('访问令牌').fill(bundle.tasks.a.token);
+    await page.getByRole('button', { name: '进入工作空间' }).click();
+    await page.getByRole('alert').filter({ hasText: '当前令牌不能查看控制台' }).waitFor();
+    assert.equal(await page.getByTestId('task-row').count(), 0);
+    await page.getByLabel('访问令牌').fill(token);
+    await page.getByRole('button', { name: '进入工作空间' }).click();
+    await page.getByTestId('task-row').first().waitFor();
+    console.log('PASS: BE-02 seed/check, null/empty context display, task-token rejection and restart restoration');
+  }
 
   // A master role may inspect the UI but cannot see edit/create controls.
   const reviewer = await api('issue_role_token', { role: 'reviewer' });

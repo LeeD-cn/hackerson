@@ -4,6 +4,8 @@
 
 对接基线：`origin/feature/backend-core` 的 `1ad51f2`（包含首批服务 `c24dbca`）。共享契约与后端代码未修改。
 
+BE-02 追加同步：仅 cherry-pick 共享契约 `39f5242`（本分支对应 `20b3d7e`），未合入整条最新后端分支。已使用独立的干净后端 `6fd94f1` 完成真实页面联调。连接和刷新时先检查 `/health`，再读取管理快照。
+
 ## 本批功能
 
 - 管理员令牌登录；协调者、审核者只读查看；任务令牌不能进入管理控制台。
@@ -89,3 +91,48 @@ npm run test:e2e
 `npm run build` 输出 `frontend/dist`。本地可执行 `npm run preview` 在 4173 预览，仍通过 Vite 代理连接后台。实际部署静态产物时，托管服务器需要另外配置 `/api` 反向代理；单独上传 dist 不会自动提供后台连接。
 
 具体实测结果见 [INTEGRATION.md](INTEGRATION.md)。
+
+## BE-02 本地接入与人工验收
+
+最新后端从**包含 `6fd94f1` 的干净目录**单独启动。不要为了运行 BE-02 把整条后端分支合入前端，也不要使用未提交的 P1 草稿。
+
+本机已准备的隔离后端目录为 `D:\Projects\hackerson\.worktrees\be02-frontend`。终端一：
+
+```powershell
+cd D:\Projects\hackerson\.worktrees\be02-frontend
+& 'D:\Projects\hackerson\.venv\Scripts\python.exe' -m backend --port 8770 --db data/be02.db
+```
+
+终端二：
+
+```powershell
+cd D:\Projects\hackerson\.worktrees\web-console\frontend
+$env:RELAY_API_URL = 'http://127.0.0.1:8770'
+npm run dev
+```
+
+在 `http://127.0.0.1:5173` 使用**隔离后端目录下**的 `.local/admin-token.txt` 登录。此文件不要与前端所在目录或其他后台的令牌文件混用。
+
+按需在后端目录运行 `python -m backend.be02 seed --url http://127.0.0.1:8770` 和 `python -m backend.be02 check`，其中 `python` 应替换为上面的虚拟环境解释器。完整说明见后端分支的 `docs/BE02_INTEGRATION.md`。不要将 `.local/be02/credentials.json` 复制到前端源码。
+
+人工验收建议：
+
+1. 登录后核对项目及已有任务是否正确。
+2. 创建一个有实际名称、目标、验收标准的任务，确认详情显示完整。
+3. 编辑目标、执行者和依赖，保存后刷新浏览器，确认数据仍在。
+4. 设置父任务，再改回无父任务，确认原有目标和依赖没有被清空。
+5. 查看上下文与变更通知，确认文案易懂，且“已确认理解”没有被当成任务完成。
+6. 调整窗口宽度，检查排版、字号、表单填写是否顺手；将不满意之处反馈给前端会话。
+
+核心自动检查已经执行，无需人工重复所有错误分支。自动检查的服务会在结束后关闭，以上命令用于你实际打开页面验收。
+
+需要复现 BE-02 自动联调时，在前端目录指定后台代码来源（不需要合并后台分支）：
+
+```powershell
+$env:RELAY_PYTHON = 'D:\Projects\hackerson\.venv\Scripts\python.exe'
+$env:RELAY_BACKEND_ROOT = 'D:\Projects\hackerson\.worktrees\be02-frontend'
+$env:RELAY_BE02 = '1'
+npm run test:e2e
+```
+
+该模式会在隔离测试服务上调用 BE-02 seed/check，检查页面上下文展示及重启恢复；测试凭据留在后台目录的 `.local/be02/frontend-*.json`，不会进入源码。

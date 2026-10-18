@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ApiError, asError, call } from './api';
+import { ApiError, asError, call, checkHealth } from './api';
 import { ErrorNotice, Icon, TextBlock, formatTime } from './components';
 import TaskEditor from './TaskEditor';
 import { notificationLabels, statusLabels, type Notification, type Snapshot, type Task, type TaskResult, type TaskStatus } from './types';
@@ -92,8 +92,11 @@ export default function App() {
     if (!token) return;
     let active = true;
     setAuthBusy(true); setAuthError(null);
-    call<Snapshot>(token, 'snapshot').then(next => {
-      if (!active) return;
+    checkHealth().then(() => {
+      if (!active) return null;
+      return call<Snapshot>(token, 'snapshot');
+    }).then(next => {
+      if (!active || !next) return;
       accept(next); rememberToken(remember.current ? token : '');
     }).catch(err => {
       if (!active) return;
@@ -107,7 +110,7 @@ export default function App() {
   async function refresh() {
     const forToken = token;
     setRefreshing(true); setError(null);
-    try { const next = await call<Snapshot>(token, 'snapshot'); if (activeToken.current === forToken) accept(next); }
+    try { await checkHealth(); if (activeToken.current !== forToken) return; const next = await call<Snapshot>(token, 'snapshot'); if (activeToken.current === forToken) accept(next); }
     catch (err) { if (activeToken.current === forToken) { const problem = asError(err); setError(problem); if (problem.status === 401) logout(true); } }
     finally { if (activeToken.current === forToken) setRefreshing(false); }
   }
