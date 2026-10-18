@@ -180,3 +180,7 @@ RELAY_API_URL = 'http://127.0.0.1:8765'
 每位成员使用自己电脑的绝对路径和自己任务的令牌；不要把本例尚不存在的 `server.py` 当作已可运行配置。本轮不改用户全局 Codex 设置。
 
 STDIO 配置字段依据 [OpenAI 官方 MCP 文档](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。SDK 锁定 1.x，参考 [官方 Python SDK v1.x](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x)，避免混用 2.x 导入路径。
+# 网页 AI 规划扩展
+
+管理员规划对话、草案与确认创建接口另见 [AI_PLANNING.md](AI_PLANNING.md)，类型在 `contracts/planning.py`。
+这是独立的 `/api/planning/*` 网页接口，不增加或修改首批任务 MCP 工具。
