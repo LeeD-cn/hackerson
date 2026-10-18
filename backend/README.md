@@ -93,3 +93,8 @@ MCP 适配器配置 `RELAY_API_URL=http://127.0.0.1:8765` 和该任务的 `RELAY
 后台重启时使用新的 HTTP 客户端；启动失败、超时或 Ctrl+C 中断都会清理本次测试进程，并提示日志路径。
 测试数据库和日志均位于 `.tmp/`，不写入正式 `data/relay.db`。
 这些检查不能代替 B 的真实 MCP 客户端验证或 C 的页面联调。
+
+## 网页 AI 规划
+
+任务规划对话、草案编辑和确认创建的后端接口见 [AI_PLANNING.md](../docs/AI_PLANNING.md)。
+配置外部模型后使用 `scripts/start_planner.ps1` 启动；新增网页界面仍需前端接入。
