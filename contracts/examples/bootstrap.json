@@ -1,0 +1,76 @@
+{
+  "project_version": 3,
+  "guidance": "样例项目：活动报名。接口字段统一 snake_case；修改公共接口需提案审批。",
+  "task": {
+    "task_id": "task_form",
+    "name": "报名表单",
+    "goal": "实现活动报名输入和提交反馈",
+    "description": "使用报名 API，显示提交成功或字段错误。",
+    "acceptance": "可提交姓名；接口返回错误时显示原因。",
+    "contract": "表单调用 POST /registrations。",
+    "constraints": "不在客户端保存服务凭据。",
+    "parent_id": null,
+    "dependencies": ["task_api"],
+    "executor": "示例执行者",
+    "branch": "feature/example-form",
+    "status": "todo",
+    "progress": 0,
+    "version": 1,
+    "archived": 0,
+    "created_at": "2026-10-18T06:00:00+00:00",
+    "updated_at": "2026-10-18T06:00:00+00:00"
+  },
+  "context": {
+    "task_id": "task_form",
+    "version": 1,
+    "data": {
+      "summary": "样例数据，尚未实现。",
+      "completed": "",
+      "todos": "实现表单并接入接口。",
+      "blockers": "等待后端服务。",
+      "decisions": "",
+      "failed_attempts": "",
+      "next_steps": "读取报名接口的最新契约。",
+      "git_notes": "没有关联的真实提交。"
+    },
+    "updated_at": "2026-10-18T06:00:00+00:00"
+  },
+  "dependency_contracts": [
+    {
+      "task_id": "task_api",
+      "name": "报名接口",
+      "contract": "POST /registrations: {name} -> {registration_id}",
+      "version": 1
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dec_example",
+      "project_version": 3,
+      "task_id": "task_form",
+      "title": "创建任务：报名表单",
+      "body": "按当前已发布接口开始开发。",
+      "actor": "admin",
+      "change_id": null,
+      "created_at": "2026-10-18T06:00:00+00:00"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "ntf_example",
+      "decision_id": "dec_example",
+      "task_id": "task_form",
+      "project_version": 3,
+      "status": "pending",
+      "note": "",
+      "created_at": "2026-10-18T06:00:00+00:00",
+      "acknowledged_at": null,
+      "completed_at": null,
+      "title": "创建任务：报名表单",
+      "body": "按当前已发布接口开始开发。"
+    }
+  ],
+  "messages": [],
+  "submissions": [],
+  "instructions": "这是用于对接的样例。新会话先读取上下文，再处理未完成通知。"
+}
