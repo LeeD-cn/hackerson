@@ -61,7 +61,7 @@ def main():
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
         table_count = db.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
     print(json.dumps({'schema_tables': table_count, 'example': 'valid',
-                      'constraint_checks': 'passed', 'runtime_features': 'not implemented'}, ensure_ascii=False))
+                      'constraint_checks': 'passed', 'runtime_features': 'not checked'}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
