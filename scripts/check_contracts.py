@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from pydantic import ValidationError
 from contracts.requests import ContextUpdate, Proposal, StatusUpdate, TaskPatch
-from contracts.responses import BootstrapContext
+from contracts.responses import BootstrapContext, ErrorResponse, QueryModuleResponse
 
 
 def must_reject(operation, exception):
@@ -24,6 +24,17 @@ def main():
     sample = BootstrapContext.model_validate_json(
         (ROOT / 'contracts/examples/bootstrap.json').read_text(encoding='utf-8'))
     ContextUpdate(expected_version=1, summary='Sample')
+    assert ContextUpdate(expected_version=1, summary=None).summary is None
+    assert ContextUpdate(expected_version=1, summary='').summary == ''
+    assert TaskPatch(parent_id=None).model_dump(exclude_unset=True) == {'parent_id': None}
+    query = QueryModuleResponse(contract=sample.dependency_contracts[0], query_id='msg_example',
+                                mode='published_contract', notice='Only published information')
+    must_reject(lambda: QueryModuleResponse.model_validate({**query.model_dump(), 'mode': 'private_context'}), ValidationError)
+    error = ErrorResponse.model_validate({'error': {'code': 'unauthorized', 'message': 'Invalid token'}})
+    assert 'details' not in error.model_dump(exclude_none=True)['error']
+    ErrorResponse.model_validate({'error': {'code': 'invalid_input', 'message': 'Invalid input',
+                                            'details': [{'field': 'expected_version', 'message': 'Field required'}]}})
+    must_reject(lambda: ErrorResponse.model_validate({'error': {'code': 'bad', 'message': 'Bad', 'details': ['wrong shape']}}), ValidationError)
     Proposal(task_id='task_api', title='Add field', rationale='Example',
              expected_project_version=3, patch={'contract': 'POST /registrations: {name, student_id}'})
     must_reject(lambda: TaskPatch(), ValidationError)
@@ -61,7 +72,7 @@ def main():
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
         table_count = db.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
     print(json.dumps({'schema_tables': table_count, 'example': 'valid',
-                      'constraint_checks': 'passed', 'runtime_features': 'not implemented'}, ensure_ascii=False))
+                      'constraint_checks': 'passed', 'runtime_features': 'not checked'}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
