@@ -138,7 +138,8 @@ notepad .local/planning/api-key.txt
 ## 本批验证范围
 
 按用户要求做简要测试：完整草案/修改/确认/重复确认/重启恢复、事务失败回滚、模型请求协议、本地密钥文件、无配置报错。
-使用测试模型与模拟模型 HTTP 响应；没有真实供应商调用结果，也未验证新增前端界面。
+上述早期后端测试使用测试模型与模拟模型 HTTP 响应。当时没有真实供应商调用或新增前端界面的验证结果。
+后续用户已确认真实规划草案创建任务、交接提示词保存及刷新恢复通过，见 [交付报告](DELIVERY.md)；本次不重跑模型或浏览器测试。
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest backend/tests/test_planning.py -q -k 'full_workflow or failure_mid_confirmation or model_protocol or unconfigured_provider' --basetemp=.tmp/planning-simple -p no:cacheprovider
