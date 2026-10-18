@@ -68,6 +68,28 @@ class PublicContract(Output):
     version: int = Field(ge=1)
 
 
+class QueryModuleResponse(Output):
+    contract: PublicContract
+    query_id: str
+    mode: Literal['published_contract']
+    notice: str
+
+
+class ErrorDetail(Output):
+    field: str
+    message: str
+
+
+class ErrorBody(Output):
+    code: str
+    message: str
+    details: list[ErrorDetail] | None = None
+
+
+class ErrorResponse(Output):
+    error: ErrorBody
+
+
 class MessageRecord(Output):
     id: str
     sender: str
