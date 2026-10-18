@@ -1,6 +1,6 @@
 # HTTP / MCP 接口契约 v0.1
 
-状态：准备阶段定义，尚未实现路由或 MCP Server。A/B/C 按本文件开发，不需要等待其他人完成整个模块。
+状态：共享契约。后端已提供 P0 HTTP 接口；BE-02 补齐跨模块查询和错误响应类型及上下文更新语义。各模块实际可用能力以对应分支和验证记录为准。
 
 ## 统一入口
 
@@ -23,7 +23,7 @@ Content-Type: application/json
 
 ## 共享输入与主要输出
 
-下面的输入类都在 `contracts/requests.py`。类定义及其 JSON Schema 是字段的精确依据：额外字段禁止；PATCH 省略字段表示不改，只有 `parent_id=null` 表示移除父任务。
+下面的输入类都在 `contracts/requests.py`。类定义及其 JSON Schema 是字段的精确依据，额外字段禁止。`TaskPatch` 与 `ContextUpdate` 的 null 规则不同，见下方更新语义。
 
 | action | 输入类 | 输出 | 权限／优先级 |
 | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ Content-Type: application/json
 | `get_my_context` | `Empty` | `BootstrapContext` | 子任务；P0 |
 | `update_my_context` | `ContextUpdate` | `TaskContext` | 子任务，仅本人；P0 |
 | `report_status` | `StatusUpdate` | `TaskSummary` | 子任务，仅本人；P0 |
-| `query_module` | `QueryModule` | `{contract: PublicContract, query_id, mode, notice}` | 所有身份；P0 |
+| `query_module` | `QueryModule` | `QueryModuleResponse` | 所有身份；P0 |
 | `send_message` | `Message` | `MessageRecord` | 所有身份；P0 |
 | `get_messages` | `Empty` | `{messages: MessageRecord[]}` | 子任务仅本人收发，主角色全局；P0 |
 | `propose_change` | `Proposal` | `{change_id, status: "pending", affected_tasks}` | 子任务、协调者、管理员；P0 最小提案 |
@@ -64,6 +64,7 @@ P1 未实现时，`snapshot.submissions` 返回空列表；不能用虚构数据
 - `TaskDetail` 在其基础上包含目标、描述、验收、发布接口、约束、执行者、分支、归档标记和时间。
 - `TaskContext` 为 `{task_id, version, data, updated_at}`，`data` 为八个固定文本字段。
 - `PublicContract` 只有 `task_id/name/contract/version`。
+- `QueryModuleResponse` 为 `{contract: PublicContract, query_id: str, mode: "published_contract", notice: str}`。
 - `BootstrapContext` 包含当前 `project_version`、授权摘要 `guidance`、本人任务及私有上下文、必要依赖接口、相关决策、本人通知/消息/提交及接手提示；不包含全局私有上下文。
 - `ChangeEvent` 包含 `decision_id/project_version/affected_tasks`。
 - `snapshot.contexts` 是以 `task_id` 为键的对象；不是数组。
@@ -93,6 +94,25 @@ Content-Type: application/json
 ```
 
 这是 `update_my_context` 的参数；版本取 `context.version`，不是 `task.version` 或 `project_version`。
+
+### ContextUpdate 与 TaskPatch 的更新语义
+
+`ContextUpdate`（`update_my_context`）对八个上下文文本字段采用以下规则：
+
+| 输入 | 行为 |
+| --- | --- |
+| 省略某字段 | 保持该字段原值 |
+| 显式 `null` | 忽略该字段，不清空 |
+| 空字符串 `""` | 清空该字段 |
+| 非 null 值与原值相同 | 仍是一次有效更新 |
+
+结构校验通过后，服务端先检查版本：版本不匹配返回 409 `version_conflict`，不写数据或历史。版本匹配但没有任何非 null 更新字段（仅有 `expected_version`，或其他字段全是 null），返回 422 `invalid_input`，版本不增加。
+
+版本匹配且存在非 null 更新字段时，版本恰好增加 1，同时保存一条完整历史快照，即使内容与原值相同。当前数据、版本和历史快照必须在同一事务中提交，失败全部回滚。
+
+真正的空请求 `{}` 缺少必填 `expected_version`，返回 422 `invalid_input`；不可把它当成“读取”或成功的空操作。输入类沿用 `str_strip_whitespace=True`，因此纯空白文本也会归一化为空字符串。
+
+`TaskPatch`（任务规划修改）不同：省略字段表示保持原值，`parent_id=null` 表示移除父任务；其他字段显式 null 均为非法参数。不要把 `TaskPatch` 的规则套用到 `ContextUpdate`。
 
 ## 示例：接口变更
 
@@ -133,7 +153,13 @@ Content-Type: application/json
 | 422 | `invalid_input`、`dependency_cycle`、`parent_cycle` | 展示字段或结构问题；不得部分写入 |
 | 500 | `internal_error` | 服务端记录详细原因，客户端只获取脱敏提示 |
 
-`details` 可省略。所有失败路径都不得在响应、日志或页面中泄露令牌及其他任务的私有数据。
+统一类型为 `ErrorResponse` → `ErrorBody`。`details` 可省略；出现时是 `ErrorDetail[]`，每项只有字符串 `field` 和 `message`，与当前服务实际输出一致，例如：
+
+```json
+{"error":{"code":"invalid_input","message":"输入参数不合法","details":[{"field":"expected_version","message":"Field required"}]}}
+```
+
+`field` 是用点连接的参数路径；请求体解析错误可能使用 `body` 前缀。没有细节时服务端省略 `details`，不输出 null。类型中的默认 None 表示可缺省，使用 Pydantic 输出时应采用 `model_dump(exclude_none=True)`。所有失败路径都不得在响应、日志或页面中泄露令牌及其他任务的私有数据。
 
 ## B 的 MCP 接入约定
 
