@@ -1,8 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { ApiError } from './api';
 
-export function Icon({ name, size = 20 }: { name: 'grid' | 'arrow' | 'plus' | 'refresh' | 'search' | 'close' | 'branch' | 'bell' | 'logout' | 'check' | 'edit'; size?: number }) {
+export function Icon({ name, size = 20 }: { name: 'chat' | 'grid' | 'arrow' | 'plus' | 'refresh' | 'search' | 'close' | 'branch' | 'bell' | 'logout' | 'check' | 'edit'; size?: number }) {
   const paths = {
+    chat: <><path d="M21 11a8 8 0 0 1-8 8H8l-5 3V11a9 9 0 0 1 18 0Z"/><path d="M7 10h10M7 14h6"/></>,
     grid: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
     arrow: <><path d="M5 12h14M13 6l6 6-6 6"/></>,
     plus: <path d="M12 5v14M5 12h14"/>,

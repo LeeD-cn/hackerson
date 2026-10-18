@@ -97,4 +97,4 @@ MCP 适配器配置 `RELAY_API_URL=http://127.0.0.1:8765` 和该任务的 `RELAY
 ## 网页 AI 规划
 
 任务规划对话、草案编辑和确认创建的后端接口见 [AI_PLANNING.md](../docs/AI_PLANNING.md)。
-配置外部模型后使用 `scripts/start_planner.ps1` 启动；新增网页界面仍需前端接入。
+配置外部模型后使用 `scripts/start_planner.ps1` 启动；网页已接入规划入口，人工验收范围见 [交付报告](../docs/DELIVERY.md)。

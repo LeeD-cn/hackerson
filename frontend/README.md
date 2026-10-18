@@ -1,5 +1,9 @@
 # Relay 前端控制台
 
+交付更新：已补管理员“AI 任务规划”页面，支持对话、草案人工编辑、确认创建和规划记录恢复。
+统一启动见根目录 README，验收证据与边界见 [DELIVERY.md](../docs/DELIVERY.md)。
+下面原有功能清单和 BE-02 记录保留为该阶段历史，不代表新增规划流程已完成全部人工验收。
+
 基于 React + TypeScript + Vite，已接入真实后端 HTTP API。没有内置演示数据或 mock fallback。
 
 对接基线：`origin/feature/backend-core` 的 `1ad51f2`（包含首批服务 `c24dbca`）。共享契约与后端代码未修改。
