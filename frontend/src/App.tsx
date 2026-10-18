@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError, asError, call, checkHealth } from './api';
 import { ErrorNotice, Icon, TextBlock, formatTime } from './components';
 import TaskEditor from './TaskEditor';
+import Planner from './Planner';
+import type { AppliedPlan } from './planningTypes';
 import { notificationLabels, statusLabels, type Notification, type Snapshot, type Task, type TaskResult, type TaskStatus } from './types';
 
 const SESSION_KEY = 'relay.console.token';
@@ -73,7 +75,7 @@ export default function App() {
   const [editor, setEditor] = useState<Task | 'new' | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
-  const [page, setPage] = useState<'tasks' | 'notifications'>('tasks');
+  const [page, setPage] = useState<'tasks' | 'notifications' | 'planning'>('tasks');
   const [noticeFilter, setNoticeFilter] = useState('all');
   const [success, setSuccess] = useState('');
   const [lastLoaded, setLastLoaded] = useState('');
@@ -124,6 +126,12 @@ export default function App() {
     await refresh();
   }
 
+  async function planApplied(result: AppliedPlan) {
+    setQuery(''); setFilter('all');
+    if (result.tasks[0]) select(result.tasks[0].task_id);
+    await refresh();
+  }
+
   if (!snapshot) return <Login busy={authBusy} error={authError} onConnect={(value, save) => { remember.current = save; setAuthBusy(true); setToken(value); }}/>;
   const visible = snapshot.tasks.filter(t => (filter === 'all' || t.status === filter) && `${t.name} ${t.goal} ${t.executor} ${t.task_id}`.toLowerCase().includes(query.toLowerCase()));
   const currentTask = snapshot.tasks.find(t => t.task_id === selected);
@@ -135,14 +143,14 @@ export default function App() {
   return <div className="app-shell">
     <aside className="sidebar"><a className="brand" href="#" onClick={e => { e.preventDefault(); setPage('tasks'); }}><span className="brand-mark">r</span>relay</a><span className="sidebar-caption">团队协作空间</span>
       <div className="project-card"><span className="project-symbol"><Icon name="branch"/></span><div><strong>{snapshot.project.name}</strong><small>项目 v{snapshot.project.version}</small></div></div>
-      <div className="nav-label">工作空间</div><nav aria-label="主导航"><button className={page === 'tasks' ? 'active' : ''} onClick={() => setPage('tasks')}><Icon name="grid"/>任务空间<span>{snapshot.tasks.length}</span></button><button className={page === 'notifications' ? 'active' : ''} onClick={() => setPage('notifications')}><Icon name="bell"/>变更通知{pending > 0 && <span>{pending}</span>}</button></nav>
+      <div className="nav-label">工作空间</div><nav aria-label="主导航"><button className={page === 'tasks' ? 'active' : ''} onClick={() => setPage('tasks')}><Icon name="grid"/>任务空间<span>{snapshot.tasks.length}</span></button>{snapshot.role === 'admin' && <button className={page === 'planning' ? 'active' : ''} onClick={() => setPage('planning')}><Icon name="chat"/>AI 任务规划</button>}<button className={page === 'notifications' ? 'active' : ''} onClick={() => setPage('notifications')}><Icon name="bell"/>变更通知{pending > 0 && <span>{pending}</span>}</button></nav>
       <div className="sidebar-bottom"><div className="live-status"><span className={`dot ${error ? 'connection-error' : ''}`}/>{error ? '同步失败 · 显示上次数据' : '真实后台已连接'}</div><div className="profile"><div className="avatar">{snapshot.role === 'admin' ? '管' : '阅'}</div><div><strong>{snapshot.role === 'admin' ? '项目管理员' : snapshot.role === 'coordinator' ? '协调者' : '审核者'}</strong><small>{snapshot.role === 'admin' ? '任务规划与协作' : '只读访问'}</small></div><button className="icon-button" aria-label="退出登录" onClick={() => logout()}><Icon name="logout" size={17}/></button></div></div>
     </aside>
-    <main className="workspace"><header className="topbar"><div className="breadcrumb">工作空间<span>/</span><strong>{page === 'tasks' ? '任务空间' : '变更通知'}</strong></div><div className="topbar-actions"><span className="sync-time">{lastLoaded && `${formatTime(lastLoaded)} 已同步`}</span><button className="button small" onClick={refresh} disabled={refreshing}><Icon name="refresh" size={16}/>{refreshing ? '同步中…' : '刷新数据'}</button></div></header>
-      <div className="workspace-content"><div className="page-heading"><div><span className="eyebrow">{page === 'tasks' ? 'TEAM WORKSPACE' : 'CHANGE TRACKING'}</span><h1>{page === 'tasks' ? '让任务清晰，让协作发生。' : '每一次变更，都有回应。'}</h1><p>{page === 'tasks' ? snapshot.project.goal || '定义目标、连接依赖，在同一份上下文上持续推进。' : '查看正式变更的影响范围，跟踪理解与修改进度。'}</p></div>{page === 'tasks' && snapshot.role === 'admin' && <button className="button primary" onClick={() => setEditor('new')}><Icon name="plus" size={18}/>新建任务</button>}</div>
+    <main className="workspace"><header className="topbar"><div className="breadcrumb">工作空间<span>/</span><strong>{page === 'planning' ? 'AI 任务规划' : page === 'tasks' ? '任务空间' : '变更通知'}</strong></div><div className="topbar-actions"><span className="sync-time">{lastLoaded && `${formatTime(lastLoaded)} 已同步`}</span><button className="button small" onClick={refresh} disabled={refreshing}><Icon name="refresh" size={16}/>{refreshing ? '同步中…' : '刷新数据'}</button></div></header>
+      <div className="workspace-content"><div className="page-heading"><div><span className="eyebrow">{page === 'planning' ? 'PLAN WITH YOUR TEAM' : page === 'tasks' ? 'TEAM WORKSPACE' : 'CHANGE TRACKING'}</span><h1>{page === 'planning' ? '把想法，变成一起做的事。' : page === 'tasks' ? '让任务清晰，让协作发生。' : '每一次变更，都有回应。'}</h1><p>{page === 'planning' ? '和 AI 讨论目标与分工，检查草案，再让任务落地。' : page === 'tasks' ? snapshot.project.goal || '定义目标、连接依赖，在同一份上下文上持续推进。' : '查看正式变更的影响范围，跟踪理解与修改进度。'}</p></div>{page === 'tasks' && snapshot.role === 'admin' && <button className="button primary" onClick={() => setEditor('new')}><Icon name="plus" size={18}/>新建任务</button>}</div>
         <ErrorNotice error={error}/>{success && <div className="success-banner" role="status"><Icon name="check" size={18}/><span>{success}</span><button className="icon-button" aria-label="关闭保存提示" onClick={() => setSuccess('')}><Icon name="close" size={16}/></button></div>}
-        <div className="stats"><div><span className="stat-icon lavender"><Icon name="grid"/></span><div><small>全部任务</small><strong>{snapshot.tasks.length}<span>项</span></strong></div></div><div><span className="stat-icon blue"><Icon name="arrow"/></span><div><small>正在推进</small><strong>{active}<span>项</span></strong></div></div><div><span className="stat-icon green"><Icon name="check"/></span><div><small>已经完成</small><strong>{done}<span>项</span></strong></div></div><div><span className="stat-icon orange"><Icon name="bell"/></span><div><small>待处理变更</small><strong>{pending}<span>条</span></strong></div></div></div>
-        {page === 'tasks' ? <div className={`task-layout ${currentTask ? '' : 'without-detail'}`}><section className="task-list-panel" aria-label="任务列表"><div className="list-heading"><h2>全部任务 <span>{visible.length}</span></h2><span className="muted">目标驱动 · 自由拆分</span></div>
+        {page !== 'planning' && <div className="stats"><div><span className="stat-icon lavender"><Icon name="grid"/></span><div><small>全部任务</small><strong>{snapshot.tasks.length}<span>项</span></strong></div></div><div><span className="stat-icon blue"><Icon name="arrow"/></span><div><small>正在推进</small><strong>{active}<span>项</span></strong></div></div><div><span className="stat-icon green"><Icon name="check"/></span><div><small>已经完成</small><strong>{done}<span>项</span></strong></div></div><div><span className="stat-icon orange"><Icon name="bell"/></span><div><small>待处理变更</small><strong>{pending}<span>条</span></strong></div></div></div>}
+        {page === 'planning' && snapshot.role === 'admin' ? <Planner token={token} tasks={snapshot.tasks} onApplied={planApplied} onShowTasks={() => setPage('tasks')} onExpired={() => logout(true)}/> : page === 'tasks' ? <div className={`task-layout ${currentTask ? '' : 'without-detail'}`}><section className="task-list-panel" aria-label="任务列表"><div className="list-heading"><h2>全部任务 <span>{visible.length}</span></h2><span className="muted">目标驱动 · 自由拆分</span></div>
           <div className="list-toolbar"><label className="search-field"><Icon name="search" size={17}/><input aria-label="搜索任务" placeholder="搜索任务、目标或执行者" value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label="筛选任务状态" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">全部状态</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
           {visible.length ? <div className="task-list">{visible.map((task, index) => <button type="button" key={task.task_id} className={`task-row ${selected === task.task_id ? 'selected' : ''}`} aria-pressed={selected === task.task_id} onClick={() => select(task.task_id)} data-testid="task-row"><div className="task-row-top"><span className="task-index">{String(index + 1).padStart(2, '0')}</span><StatusBadge status={task.status}/><span className="task-percent">{task.progress}%</span></div><h3>{task.name}</h3><p className="task-goal">{task.goal}</p><div className="progress-track"><span style={{ width: `${task.progress}%` }}/></div><div className="task-row-bottom"><span className="executor"><span className="tiny-avatar">{task.executor.trim().slice(0, 1) || '—'}</span>{task.executor || '尚未分配'}</span><span className="dependency-count"><Icon name="branch" size={14}/>{task.dependencies.length ? `${task.dependencies.length} 项依赖` : '独立任务'}<Icon name="arrow" size={14}/></span></div></button>)}</div>
             : <div className="empty-state"><span className="empty-icon"><Icon name="grid" size={30}/></span><h3>{snapshot.tasks.length ? '没有匹配的任务' : '从第一项任务开始'}</h3><p>{snapshot.tasks.length ? '试试其他关键词或状态筛选。' : '把一个明确目标交给一个任务，让团队从这里开始协作。'}</p>{snapshot.tasks.length ? <button className="button" onClick={() => { setQuery(''); setFilter('all'); }}>清除筛选</button> : snapshot.role === 'admin' && <button className="button primary" onClick={() => setEditor('new')}><Icon name="plus" size={16}/>创建第一项任务</button>}</div>}

@@ -4,9 +4,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit): Promise<T> {
+async function request<T>(path: string, options: RequestInit, timeoutMs = 15000): Promise<T> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store' });
     const payload = await response.json().catch(() => null);
@@ -19,11 +19,18 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(0, 'network_error', options.method === 'GET'
-      ? '无法连接后台健康检查接口，请检查后台服务及代理地址。'
+      ? '无法连接后台服务，请检查后台服务及代理地址。'
       : '连接中断或请求超时。写入结果可能未知，请刷新列表确认后再操作。');
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+export function planningRequest<T>(token: string, path: string, method = 'GET', body?: object): Promise<T> {
+  return request<T>(`/api/planning${path}`, {
+    method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }, method === 'POST' && path === '/chat' ? 195000 : 15000);
 }
 
 export function call<T>(token: string, action: string, body: object = {}): Promise<T> {
