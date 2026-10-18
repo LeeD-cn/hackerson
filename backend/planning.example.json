@@ -1,0 +1,7 @@
+{
+  "base_url": "https://llmapi.paratera.com",
+  "model": "DeepSeek-V4-Pro-0813",
+  "api_key_file": ".local/planning/api-key.txt",
+  "json_mode": false,
+  "timeout_seconds": 90
+}
